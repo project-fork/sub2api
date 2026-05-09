@@ -2771,6 +2771,11 @@ func selectByLRU(accounts []accountWithLoad, preferOAuth bool) *accountWithLoad 
 		return &accounts[0]
 	}
 
+	accounts = filterByEarliestQuotaReset(accounts)
+	if len(accounts) == 1 {
+		return &accounts[0]
+	}
+
 	// 1. 找到最小的 LastUsedAt（nil 被视为最小）
 	var minTime *time.Time
 	hasNil := false
@@ -2821,11 +2826,64 @@ func selectByLRU(accounts []accountWithLoad, preferOAuth bool) *accountWithLoad 
 	return &accounts[selectedIdx]
 }
 
+// filterByEarliestQuotaReset filters candidates to accounts with the earliest
+// known quota reset. Accounts without reset metadata only remain when no
+// candidate has reset metadata.
+func filterByEarliestQuotaReset(accounts []accountWithLoad) []accountWithLoad {
+	if len(accounts) == 0 {
+		return accounts
+	}
+	var earliest *time.Time
+	for _, acc := range accounts {
+		resetAt := acc.account.NextQuotaResetAt()
+		if resetAt == nil {
+			continue
+		}
+		if earliest == nil || resetAt.Before(*earliest) {
+			t := *resetAt
+			earliest = &t
+		}
+	}
+	if earliest == nil {
+		return accounts
+	}
+	result := make([]accountWithLoad, 0, len(accounts))
+	for _, acc := range accounts {
+		resetAt := acc.account.NextQuotaResetAt()
+		if resetAt != nil && resetAt.Equal(*earliest) {
+			result = append(result, acc)
+		}
+	}
+	return result
+}
+
+func compareAccountsByQuotaReset(a, b *Account) int {
+	aReset := a.NextQuotaResetAt()
+	bReset := b.NextQuotaResetAt()
+	switch {
+	case aReset == nil && bReset == nil:
+		return 0
+	case aReset != nil && bReset == nil:
+		return -1
+	case aReset == nil && bReset != nil:
+		return 1
+	case aReset.Before(*bReset):
+		return -1
+	case bReset.Before(*aReset):
+		return 1
+	default:
+		return 0
+	}
+}
+
 func sortAccountsByPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
 	sort.SliceStable(accounts, func(i, j int) bool {
 		a, b := accounts[i], accounts[j]
 		if a.Priority != b.Priority {
 			return a.Priority < b.Priority
+		}
+		if cmp := compareAccountsByQuotaReset(a, b); cmp != 0 {
+			return cmp < 0
 		}
 		switch {
 		case a.LastUsedAt == nil && b.LastUsedAt != nil:
@@ -2926,6 +2984,9 @@ func sameAccountGroup(a, b *Account) bool {
 	if a.Priority != b.Priority {
 		return false
 	}
+	if compareAccountsByQuotaReset(a, b) != 0 {
+		return false
+	}
 	return sameLastUsedAt(a.LastUsedAt, b.LastUsedAt)
 }
 
@@ -2960,6 +3021,9 @@ func sortAccountsByPriorityOnly(accounts []*Account, preferOAuth bool) {
 		a, b := accounts[i], accounts[j]
 		if a.Priority != b.Priority {
 			return a.Priority < b.Priority
+		}
+		if cmp := compareAccountsByQuotaReset(a, b); cmp != 0 {
+			return cmp < 0
 		}
 		if preferOAuth && a.Type != b.Type {
 			return a.Type == AccountTypeOAuth

@@ -159,6 +159,10 @@ type BulkUpdateAccountFilters struct {
 	PrivacyMode string `json:"privacy_mode"`
 }
 
+type QuotaTouchAccountsRequest struct {
+	AccountIDs []int64 `json:"account_ids" binding:"required"`
+}
+
 // CheckMixedChannelRequest represents check mixed channel risk request
 type CheckMixedChannelRequest struct {
 	Platform  string  `json:"platform" binding:"required"`
@@ -1712,6 +1716,33 @@ func (h *AccountHandler) ResetQuota(c *gin.Context) {
 	}
 
 	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), account))
+}
+
+// QuotaTouch triggers minimal upstream OpenAI/Codex requests for selected accounts
+// and initializes local quota reset window metadata after upstream success.
+// POST /api/v1/admin/accounts/quota-touch
+func (h *AccountHandler) QuotaTouch(c *gin.Context) {
+	if h.accountTestService == nil {
+		response.InternalError(c, "Account test service is not available")
+		return
+	}
+
+	var req QuotaTouchAccountsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if len(req.AccountIDs) == 0 {
+		response.BadRequest(c, "account_ids is required")
+		return
+	}
+
+	result, err := h.accountTestService.TouchOpenAIQuota(c.Request.Context(), req.AccountIDs)
+	if err != nil {
+		response.InternalError(c, "Failed to touch account quota: "+err.Error())
+		return
+	}
+	response.Success(c, result)
 }
 
 // GetTempUnschedulable handles getting temporary unschedulable status

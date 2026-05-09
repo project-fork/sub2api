@@ -432,6 +432,9 @@ func isOpenAIAccountCandidateBetter(left openAIAccountCandidateScore, right open
 	if left.account.Priority != right.account.Priority {
 		return left.account.Priority < right.account.Priority
 	}
+	if cmp := compareAccountsByQuotaReset(left.account, right.account); cmp != 0 {
+		return cmp < 0
+	}
 	if left.loadInfo.LoadRate != right.loadInfo.LoadRate {
 		return left.loadInfo.LoadRate < right.loadInfo.LoadRate
 	}

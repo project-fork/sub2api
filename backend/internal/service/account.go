@@ -1671,6 +1671,28 @@ func (a *Account) GetQuotaResetTimezone() string {
 	return "UTC"
 }
 
+// NextQuotaResetAt returns the earliest known quota reset timestamp.
+// Expired reset timestamps are intentionally kept: the scheduler treats them as
+// highest priority so the next request can refresh the stale local window.
+func (a *Account) NextQuotaResetAt() *time.Time {
+	if a == nil {
+		return nil
+	}
+	var earliest *time.Time
+	for _, key := range []string{"codex_7d_reset_at", "quota_daily_reset_at", "quota_weekly_reset_at"} {
+		resetAt := a.getExtraTime(key)
+		if resetAt.IsZero() {
+			continue
+		}
+		resetAt = resetAt.UTC()
+		if earliest == nil || resetAt.Before(*earliest) {
+			t := resetAt
+			earliest = &t
+		}
+	}
+	return earliest
+}
+
 // --- Quota Notification Getters ---
 
 // QuotaNotifyConfig returns the notify configuration for a given quota dimension.

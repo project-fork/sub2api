@@ -3198,10 +3198,13 @@ export default {
         delete: '批量删除',
         enableScheduling: '批量启用调度',
         disableScheduling: '批量停止调度',
+        quotaTouch: '激活额度重置',
         resetStatus: '批量重置状态',
         refreshToken: '批量刷新令牌',
         resetStatusSuccess: '已成功重置 {count} 个账号状态',
         refreshTokenSuccess: '已成功刷新 {count} 个账号令牌',
+        quotaTouchSuccess: '已成功激活 {count} 个账号额度重置',
+        quotaTouchPartial: '额度重置激活部分完成：成功 {success} 个，失败 {failed} 个',
         partialSuccess: '操作部分完成：{success} 成功，{failed} 失败'
       },
       bulkEdit: {

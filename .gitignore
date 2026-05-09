@@ -136,3 +136,5 @@ docs/*
 frontend/coverage/
 aicodex
 output/
+# local build artifacts
+backend/sub2api-linux-arm64

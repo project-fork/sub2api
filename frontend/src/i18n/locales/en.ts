@@ -3051,10 +3051,13 @@ export default {
         delete: 'Bulk Delete',
         enableScheduling: 'Enable Scheduling',
         disableScheduling: 'Disable Scheduling',
+        quotaTouch: 'Activate Quota Reset',
         resetStatus: 'Reset Status',
         refreshToken: 'Refresh Token',
         resetStatusSuccess: 'Successfully reset {count} account(s) status',
         refreshTokenSuccess: 'Successfully refreshed {count} account(s) token',
+        quotaTouchSuccess: 'Successfully activated quota reset for {count} account(s)',
+        quotaTouchPartial: 'Quota reset activation partially completed: {success} succeeded, {failed} failed',
         partialSuccess: 'Partially completed: {success} succeeded, {failed} failed'
       },
       bulkEdit: {

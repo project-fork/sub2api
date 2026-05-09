@@ -273,6 +273,26 @@ export async function resetAccountQuota(id: number): Promise<Account> {
   return data
 }
 
+export interface QuotaTouchResult {
+  account_id: number
+  success: boolean
+  touched: boolean
+  message?: string
+}
+
+export interface QuotaTouchResponse {
+  success: number
+  failed: number
+  results: QuotaTouchResult[]
+}
+
+export async function quotaTouch(accountIds: number[]): Promise<QuotaTouchResponse> {
+  const { data } = await apiClient.post<QuotaTouchResponse>('/admin/accounts/quota-touch', {
+    account_ids: accountIds
+  })
+  return data
+}
+
 /**
  * Get temporary unschedulable status
  * @param id - Account ID
@@ -656,6 +676,7 @@ export const accountsAPI = {
   clearRateLimit,
   recoverState,
   resetAccountQuota,
+  quotaTouch,
   getTempUnschedulableStatus,
   resetTempUnschedulable,
   setSchedulable,

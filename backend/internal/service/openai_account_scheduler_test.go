@@ -1130,6 +1130,56 @@ func TestSelectTopKOpenAICandidates(t *testing.T) {
 	require.Equal(t, int64(14), topAll[3].account.ID)
 }
 
+func TestSelectTopKOpenAICandidates_QuotaResetTieBreaker(t *testing.T) {
+	now := time.Now().UTC()
+	candidates := []openAIAccountCandidateScore{
+		{
+			account:  &Account{ID: 21, Priority: 1, Extra: map[string]any{"quota_daily_reset_at": now.Add(6 * time.Hour).Format(time.RFC3339)}},
+			loadInfo: &AccountLoadInfo{LoadRate: 10, WaitingCount: 0},
+			score:    10.0,
+		},
+		{
+			account:  &Account{ID: 22, Priority: 1, Extra: map[string]any{"quota_daily_reset_at": now.Add(30 * time.Minute).Format(time.RFC3339)}},
+			loadInfo: &AccountLoadInfo{LoadRate: 10, WaitingCount: 0},
+			score:    10.0,
+		},
+		{
+			account:  &Account{ID: 23, Priority: 0, Extra: map[string]any{"quota_daily_reset_at": now.Add(24 * time.Hour).Format(time.RFC3339)}},
+			loadInfo: &AccountLoadInfo{LoadRate: 10, WaitingCount: 0},
+			score:    10.0,
+		},
+	}
+
+	top := selectTopKOpenAICandidates(candidates, 3)
+
+	require.Len(t, top, 3)
+	require.Equal(t, int64(23), top[0].account.ID, "priority 仍应优先于额度重置时间")
+	require.Equal(t, int64(22), top[1].account.ID, "同 score 和 priority 时更快重置应优先")
+	require.Equal(t, int64(21), top[2].account.ID)
+}
+
+func TestSelectTopKOpenAICandidates_Codex7dResetTieBreaker(t *testing.T) {
+	now := time.Now().UTC()
+	candidates := []openAIAccountCandidateScore{
+		{
+			account:  &Account{ID: 24, Priority: 1, Extra: map[string]any{"quota_weekly_reset_at": now.Add(2 * time.Hour).Format(time.RFC3339)}},
+			loadInfo: &AccountLoadInfo{LoadRate: 10, WaitingCount: 0},
+			score:    10.0,
+		},
+		{
+			account:  &Account{ID: 25, Priority: 1, Extra: map[string]any{"codex_7d_reset_at": now.Add(time.Hour).Format(time.RFC3339)}},
+			loadInfo: &AccountLoadInfo{LoadRate: 10, WaitingCount: 0},
+			score:    10.0,
+		},
+	}
+
+	top := selectTopKOpenAICandidates(candidates, 2)
+
+	require.Len(t, top, 2)
+	require.Equal(t, int64(25), top[0].account.ID, "codex_7d_reset_at 更早时应优先")
+	require.Equal(t, int64(24), top[1].account.ID)
+}
+
 func TestBuildOpenAIWeightedSelectionOrder_DeterministicBySessionSeed(t *testing.T) {
 	candidates := []openAIAccountCandidateScore{
 		{
