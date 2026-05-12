@@ -9,7 +9,7 @@ const {
   getBatchTodayStats,
   getAllProxies,
   getAllGroups,
-  quotaTouch,
+  testAccount,
   showError,
   showSuccess
 } = vi.hoisted(() => ({
@@ -18,7 +18,7 @@ const {
   getBatchTodayStats: vi.fn(),
   getAllProxies: vi.fn(),
   getAllGroups: vi.fn(),
-  quotaTouch: vi.fn(),
+  testAccount: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn()
 }))
@@ -33,7 +33,8 @@ vi.mock('@/api/admin', () => ({
       batchClearError: vi.fn(),
       batchRefresh: vi.fn(),
       toggleSchedulable: vi.fn(),
-      quotaTouch
+      quotaTouch: vi.fn(),
+      testAccount
     },
     proxies: {
       getAll: getAllProxies
@@ -75,12 +76,12 @@ const DataTableStub = {
 
 const AccountBulkActionsBarStub = {
   props: ['selectedIds'],
-  emits: ['edit-filtered', 'quota-touch', 'select-page'],
+  emits: ['edit-filtered', 'batch-test', 'select-page'],
   template: `
     <div>
       <button data-test="edit-filtered" @click="$emit('edit-filtered')">edit filtered</button>
       <button data-test="select-page" @click="$emit('select-page')">select page</button>
-      <button data-test="quota-touch" @click="$emit('quota-touch')">quota touch</button>
+      <button data-test="batch-test" @click="$emit('batch-test')">batch test</button>
     </div>
   `
 }
@@ -99,14 +100,15 @@ describe('admin AccountsView bulk edit scope', () => {
     getBatchTodayStats.mockReset()
     getAllProxies.mockReset()
     getAllGroups.mockReset()
-    quotaTouch.mockReset()
+    testAccount.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
 
     listAccounts.mockResolvedValue({
       items: [
-        { id: 101, name: 'OpenAI 1' }
+        { id: 101, name: 'OpenAI 1' },
+        { id: 102, name: 'OpenAI 2' }
       ],
       total: 0,
       page: 1,
@@ -121,7 +123,7 @@ describe('admin AccountsView bulk edit scope', () => {
     getBatchTodayStats.mockResolvedValue({ stats: {} })
     getAllProxies.mockResolvedValue([])
     getAllGroups.mockResolvedValue([])
-    quotaTouch.mockResolvedValue({ success: 1, failed: 0, results: [] })
+    testAccount.mockResolvedValue({ success: true, message: 'ok' })
   })
 
   afterEach(() => {
@@ -174,7 +176,7 @@ describe('admin AccountsView bulk edit scope', () => {
     expect(wrapper.get('[data-test="bulk-edit-modal"]').attributes('data-target-mode')).toBe('filtered')
   })
 
-  it('calls quota touch from the bulk actions bar for selected accounts', async () => {
+  it('tests selected accounts sequentially from the bulk actions bar', async () => {
     const wrapper = mount(AccountsView, {
       global: {
         stubs: {
@@ -215,13 +217,28 @@ describe('admin AccountsView bulk edit scope', () => {
       }
     })
 
+    let resolveFirst: ((value: { success: boolean; message: string }) => void) | null = null
+    const firstCall = new Promise<{ success: boolean; message: string }>((resolve) => {
+      resolveFirst = resolve
+    })
+    testAccount
+      .mockImplementationOnce(() => firstCall)
+      .mockResolvedValueOnce({ success: true, message: 'second ok' })
+
     await flushPromises()
     await wrapper.get('[data-test="select-page"]').trigger('click')
-    await wrapper.get('[data-test="quota-touch"]').trigger('click')
+    await wrapper.get('[data-test="batch-test"]').trigger('click')
+    await flushPromises()
+
+    expect(testAccount).toHaveBeenCalledTimes(1)
+    expect(testAccount).toHaveBeenNthCalledWith(1, 101)
+
+    resolveFirst?.({ success: true, message: 'first ok' })
     await flushPromises()
 
     expect(window.confirm).toHaveBeenCalledWith('common.confirm')
-    expect(quotaTouch).toHaveBeenCalledWith([101])
-    expect(showSuccess).toHaveBeenCalledWith('admin.accounts.bulkActions.quotaTouchSuccess')
+    expect(testAccount).toHaveBeenCalledTimes(2)
+    expect(testAccount).toHaveBeenNthCalledWith(2, 102)
+    expect(showSuccess).toHaveBeenCalledWith('admin.accounts.bulkActions.batchTestSuccess')
   })
 })

@@ -174,6 +174,7 @@
       <template #table>
         <AccountBulkActionsBar
           :selected-ids="selIds"
+          :batch-testing="batchTesting"
           @delete="handleBulkDelete"
           @reset-status="handleBulkResetStatus"
           @refresh-token="handleBulkRefreshToken"
@@ -182,7 +183,7 @@
           @clear="clearSelection"
           @select-page="selectPage"
           @toggle-schedulable="handleBulkToggleSchedulable"
-          @quota-touch="handleBulkQuotaTouch"
+          @batch-test="handleBulkBatchTest"
         />
         <div ref="accountTableRef" class="flex min-h-0 flex-1 flex-col overflow-hidden">
         <DataTable
@@ -486,6 +487,7 @@ const showSchedulePanel = ref(false)
 const scheduleAcc = ref<Account | null>(null)
 const scheduleModelOptions = ref<SelectOption[]>([])
 const togglingSchedulable = ref<number | null>(null)
+const batchTesting = ref(false)
 const menu = reactive<{show:boolean, acc:Account|null, pos:{top:number, left:number}|null}>({ show: false, acc: null, pos: null })
 const exportingData = ref(false)
 
@@ -1236,20 +1238,38 @@ const handleBulkRefreshToken = async () => {
     appStore.showError(String(error))
   }
 }
-const handleBulkQuotaTouch = async () => {
+const handleBulkBatchTest = async () => {
+  if (batchTesting.value) return
   if (!confirm(t('common.confirm'))) return
+  const selectedIds = [...selIds.value]
   try {
-    const result = await adminAPI.accounts.quotaTouch(selIds.value)
-    if (result.failed > 0) {
-      appStore.showError(t('admin.accounts.bulkActions.quotaTouchPartial', { success: result.success, failed: result.failed }))
+    batchTesting.value = true
+    let success = 0
+    let failed = 0
+
+    for (const accountId of selectedIds) {
+      try {
+        const result = await adminAPI.accounts.testAccount(accountId)
+        if (result.success) success += 1
+        else failed += 1
+      } catch (error) {
+        failed += 1
+        console.error(`Failed to test account ${accountId}:`, error)
+      }
+    }
+
+    if (failed > 0) {
+      appStore.showError(t('admin.accounts.bulkActions.batchTestPartial', { success, failed }))
     } else {
-      appStore.showSuccess(t('admin.accounts.bulkActions.quotaTouchSuccess', { count: result.success }))
+      appStore.showSuccess(t('admin.accounts.bulkActions.batchTestSuccess', { count: success }))
       clearSelection()
     }
     reload()
   } catch (error) {
-    console.error('Failed to bulk quota touch accounts:', error)
+    console.error('Failed to batch test accounts:', error)
     appStore.showError(String(error))
+  } finally {
+    batchTesting.value = false
   }
 }
 const updateSchedulableInList = (accountIds: number[], schedulable: boolean) => {
