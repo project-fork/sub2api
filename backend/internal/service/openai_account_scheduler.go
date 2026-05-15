@@ -589,6 +589,57 @@ func buildOpenAIWeightedSelectionOrder(
 	return order
 }
 
+func splitOpenAICandidatesByPriorityAndEarliestQuotaReset(candidates []openAIAccountCandidateScore) ([]openAIAccountCandidateScore, []openAIAccountCandidateScore) {
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
+	minPriority := candidates[0].account.Priority
+	for _, candidate := range candidates[1:] {
+		if candidate.account.Priority < minPriority {
+			minPriority = candidate.account.Priority
+		}
+	}
+
+	result := append([]openAIAccountCandidateScore(nil), candidates...)
+	if len(result) <= 1 {
+		return result, nil
+	}
+
+	var earliest *time.Time
+	for _, candidate := range result {
+		if candidate.account.Priority != minPriority {
+			continue
+		}
+		resetAt := candidate.account.NextQuotaResetAt()
+		if resetAt == nil {
+			continue
+		}
+		if earliest == nil || resetAt.Before(*earliest) {
+			t := *resetAt
+			earliest = &t
+		}
+	}
+	if earliest == nil {
+		return result, nil
+	}
+
+	prioritized := make([]openAIAccountCandidateScore, 0, len(result))
+	remaining := make([]openAIAccountCandidateScore, 0, len(result))
+	for _, candidate := range result {
+		resetAt := candidate.account.NextQuotaResetAt()
+		if candidate.account.Priority == minPriority && resetAt != nil && resetAt.Equal(*earliest) {
+			prioritized = append(prioritized, candidate)
+			continue
+		}
+		remaining = append(remaining, candidate)
+	}
+	if len(prioritized) == 0 {
+		return result, nil
+	}
+	return prioritized, remaining
+}
+
 func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 	ctx context.Context,
 	req OpenAIAccountScheduleRequest,
@@ -763,7 +814,11 @@ func (s *defaultOpenAIAccountScheduler) selectByLoadBalance(
 			groupTopK = len(pool)
 		}
 		ranked := selectTopKOpenAICandidates(pool, groupTopK)
-		return buildOpenAIWeightedSelectionOrder(ranked, req)
+		prioritized, remaining := splitOpenAICandidatesByPriorityAndEarliestQuotaReset(ranked)
+		ordered := make([]openAIAccountCandidateScore, 0, len(ranked))
+		ordered = append(ordered, buildOpenAIWeightedSelectionOrder(prioritized, req)...)
+		ordered = append(ordered, buildOpenAIWeightedSelectionOrder(remaining, req)...)
+		return ordered
 	}
 	sortCompactRetryCandidates := func(pool []openAIAccountCandidateScore) []openAIAccountCandidateScore {
 		if len(pool) == 0 {

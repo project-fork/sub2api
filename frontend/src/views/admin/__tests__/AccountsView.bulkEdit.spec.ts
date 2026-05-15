@@ -241,4 +241,58 @@ describe('admin AccountsView bulk edit scope', () => {
     expect(testAccount).toHaveBeenNthCalledWith(2, 102)
     expect(showSuccess).toHaveBeenCalledWith('admin.accounts.bulkActions.batchTestSuccess')
   })
+
+  it('requests server-side sorting for the reset time column', async () => {
+    const wrapper = mount(AccountsView, {
+      global: {
+        stubs: {
+          AppLayout: { template: '<div><slot /></div>' },
+          TablePageLayout: {
+            template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
+          },
+          DataTable: {
+            props: ['columns', 'data'],
+            emits: ['sort'],
+            template: '<button data-test="sort-reset" @click="$emit(\'sort\', \'reset_at\', \'asc\')">sort reset</button>'
+          },
+          Pagination: true,
+          ConfirmDialog: true,
+          AccountTableActions: { template: '<div><slot name="beforeCreate" /><slot name="after" /></div>' },
+          AccountTableFilters: { template: '<div></div>' },
+          AccountBulkActionsBar: AccountBulkActionsBarStub,
+          AccountActionMenu: true,
+          ImportDataModal: true,
+          ReAuthAccountModal: true,
+          AccountTestModal: true,
+          AccountStatsModal: true,
+          ScheduledTestsPanel: true,
+          SyncFromCrsModal: true,
+          TempUnschedStatusModal: true,
+          ErrorPassthroughRulesModal: true,
+          TLSFingerprintProfilesModal: true,
+          CreateAccountModal: true,
+          EditAccountModal: true,
+          BulkEditAccountModal: BulkEditAccountModalStub,
+          PlatformTypeBadge: true,
+          AccountCapacityCell: true,
+          AccountStatusIndicator: true,
+          AccountTodayStatsCell: true,
+          AccountGroupsCell: true,
+          AccountUsageCell: true,
+          Icon: true
+        }
+      }
+    })
+
+    await flushPromises()
+    listAccounts.mockClear()
+
+    await wrapper.get('[data-test="sort-reset"]').trigger('click')
+    await flushPromises()
+
+    expect(listAccounts).toHaveBeenCalled()
+    const [, , filters] = listAccounts.mock.calls.at(-1) ?? []
+    expect(filters.sort_by).toBe('reset_at')
+    expect(filters.sort_order).toBe('asc')
+  })
 })

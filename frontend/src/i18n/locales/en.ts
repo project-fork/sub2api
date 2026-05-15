@@ -2908,6 +2908,7 @@ export default {
         groups: 'Groups',
         usageWindows: 'Usage Windows',
         proxy: 'Proxy',
+        resetAt: 'Reset Time',
         lastUsed: 'Last Used',
         expiresAt: 'Expires At',
         actions: 'Actions'

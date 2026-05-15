@@ -300,6 +300,11 @@
           <template #cell-priority="{ value }">
             <span class="text-sm text-gray-700 dark:text-gray-300">{{ value }}</span>
           </template>
+          <template #cell-reset_at="{ row }">
+            <span class="text-sm text-gray-500 dark:text-dark-400">
+              {{ formatAccountResetAt(row) }}
+            </span>
+          </template>
           <template #cell-last_used_at="{ value }">
             <span class="text-sm text-gray-500 dark:text-dark-400">{{ formatRelativeTime(value) }}</span>
           </template>
@@ -412,7 +417,7 @@ import Icon from '@/components/icons/Icon.vue'
 import ErrorPassthroughRulesModal from '@/components/admin/ErrorPassthroughRulesModal.vue'
 import TLSFingerprintProfilesModal from '@/components/admin/TLSFingerprintProfilesModal.vue'
 import { buildOpenAIUsageRefreshKey } from '@/utils/accountUsageRefresh'
-import { formatDateTime, formatRelativeTime } from '@/utils/format'
+import { formatCountdown, formatDateTime, formatRelativeTime } from '@/utils/format'
 import type { Account, AccountPlatform, AccountType, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel } from '@/types'
 
 const { t } = useI18n()
@@ -511,6 +516,7 @@ const ACCOUNT_SORTABLE_KEYS = new Set([
   'schedulable',
   'priority',
   'rate_multiplier',
+  'reset_at',
   'last_used_at',
   'expires_at'
 ])
@@ -883,6 +889,22 @@ const shouldReplaceAutoRefreshRow = (current: Account, next: Account) => {
   )
 }
 
+const isCodexResetAccount = (account: Account) => {
+  return account.platform === 'openai' && account.type === 'oauth'
+}
+
+const getCodexResetAt = (account: Account): string | null => {
+  if (!isCodexResetAccount(account)) return null
+  const raw = account.extra?.codex_7d_reset_at
+  return typeof raw === 'string' && raw.trim() ? raw : null
+}
+
+const formatAccountResetAt = (account: Account): string => {
+  const resetAt = getCodexResetAt(account)
+  if (!resetAt) return '-'
+  return formatCountdown(resetAt) ?? '-'
+}
+
 const syncAccountRefs = (nextAccount: Account) => {
   if (edAcc.value?.id === nextAccount.id) edAcc.value = nextAccount
   if (reAuthAcc.value?.id === nextAccount.id) reAuthAcc.value = nextAccount
@@ -1129,6 +1151,7 @@ const allColumns = computed(() => {
     { key: 'proxy', label: t('admin.accounts.columns.proxy'), sortable: false },
     { key: 'priority', label: t('admin.accounts.columns.priority'), sortable: true },
     { key: 'rate_multiplier', label: t('admin.accounts.columns.billingRateMultiplier'), sortable: true },
+    { key: 'reset_at', label: t('admin.accounts.columns.resetAt'), sortable: true },
     { key: 'last_used_at', label: t('admin.accounts.columns.lastUsed'), sortable: true },
     { key: 'expires_at', label: t('admin.accounts.columns.expiresAt'), sortable: true },
     { key: 'notes', label: t('admin.accounts.columns.notes'), sortable: false },

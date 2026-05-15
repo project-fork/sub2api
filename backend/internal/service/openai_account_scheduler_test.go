@@ -1001,6 +1001,77 @@ func TestOpenAIGatewayService_SelectAccountWithScheduler_LoadBalanceTopKFallback
 	}
 }
 
+func TestOpenAIGatewayService_SelectAccountWithScheduler_LoadBalancePrefersEarlierCodex7dResetWithinSamePriority(t *testing.T) {
+	ctx := context.Background()
+	groupID := int64(10107)
+	now := time.Now().UTC()
+	accounts := []Account{
+		{
+			ID:          37001,
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeOAuth,
+			Status:      StatusActive,
+			Schedulable: true,
+			Concurrency: 1,
+			Priority:    1,
+			Extra: map[string]any{
+				"codex_7d_reset_at": now.Add(19*time.Hour + 33*time.Minute).Format(time.RFC3339),
+			},
+		},
+		{
+			ID:          37002,
+			Platform:    PlatformOpenAI,
+			Type:        AccountTypeOAuth,
+			Status:      StatusActive,
+			Schedulable: true,
+			Concurrency: 1,
+			Priority:    1,
+			Extra: map[string]any{
+				"codex_7d_reset_at": now.Add(19*time.Hour + 37*time.Minute).Format(time.RFC3339),
+			},
+		},
+	}
+
+	cfg := &config.Config{}
+	cfg.Gateway.OpenAIWS.LBTopK = 2
+	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Priority = 1.0
+	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Load = 1.0
+	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.Queue = 0.7
+	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.ErrorRate = 0.8
+	cfg.Gateway.OpenAIWS.SchedulerScoreWeights.TTFT = 0.5
+
+	concurrencyCache := schedulerTestConcurrencyCache{
+		loadMap: map[int64]*AccountLoadInfo{
+			37001: {AccountID: 37001, LoadRate: 90, WaitingCount: 5},
+			37002: {AccountID: 37002, LoadRate: 0, WaitingCount: 0},
+		},
+	}
+
+	svc := &OpenAIGatewayService{
+		accountRepo:        schedulerTestOpenAIAccountRepo{accounts: accounts},
+		cache:              &schedulerTestGatewayCache{},
+		cfg:                cfg,
+		rateLimitService:   newOpenAIAdvancedSchedulerRateLimitService("true"),
+		concurrencyService: NewConcurrencyService(concurrencyCache),
+	}
+
+	selection, decision, err := svc.SelectAccountWithScheduler(
+		ctx,
+		&groupID,
+		"",
+		"session_hash_prefers_earlier_codex_7d_reset",
+		"gpt-5.1",
+		nil,
+		OpenAIUpstreamTransportAny,
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, selection)
+	require.NotNil(t, selection.Account)
+	require.Equal(t, int64(37001), selection.Account.ID, "同优先级时应先使用更早 7d 重置的账号")
+	require.Equal(t, openAIAccountScheduleLayerLoadBalance, decision.Layer)
+}
+
 func TestOpenAIGatewayService_OpenAIAccountSchedulerMetrics(t *testing.T) {
 	ctx := context.Background()
 	groupID := int64(12)
@@ -1178,6 +1249,28 @@ func TestSelectTopKOpenAICandidates_Codex7dResetTieBreaker(t *testing.T) {
 	require.Len(t, top, 2)
 	require.Equal(t, int64(25), top[0].account.ID, "codex_7d_reset_at 更早时应优先")
 	require.Equal(t, int64(24), top[1].account.ID)
+}
+
+func TestSelectTopKOpenAICandidates_Codex5hResetTieBreaker(t *testing.T) {
+	now := time.Now().UTC()
+	candidates := []openAIAccountCandidateScore{
+		{
+			account:  &Account{ID: 26, Priority: 1, Extra: map[string]any{"codex_7d_reset_at": now.Add(40 * time.Minute).Format(time.RFC3339)}},
+			loadInfo: &AccountLoadInfo{LoadRate: 10, WaitingCount: 0},
+			score:    10.0,
+		},
+		{
+			account:  &Account{ID: 27, Priority: 1, Extra: map[string]any{"codex_5h_reset_at": now.Add(15 * time.Minute).Format(time.RFC3339)}},
+			loadInfo: &AccountLoadInfo{LoadRate: 10, WaitingCount: 0},
+			score:    10.0,
+		},
+	}
+
+	top := selectTopKOpenAICandidates(candidates, 2)
+
+	require.Len(t, top, 2)
+	require.Equal(t, int64(27), top[0].account.ID, "codex_5h_reset_at 更早时应优先")
+	require.Equal(t, int64(26), top[1].account.ID)
 }
 
 func TestBuildOpenAIWeightedSelectionOrder_DeterministicBySessionSeed(t *testing.T) {

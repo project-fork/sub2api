@@ -1679,7 +1679,7 @@ func (a *Account) NextQuotaResetAt() *time.Time {
 		return nil
 	}
 	var earliest *time.Time
-	for _, key := range []string{"codex_7d_reset_at", "quota_daily_reset_at", "quota_weekly_reset_at"} {
+	for _, key := range []string{"codex_5h_reset_at", "codex_7d_reset_at", "quota_daily_reset_at", "quota_weekly_reset_at"} {
 		resetAt := a.getExtraTime(key)
 		if resetAt.IsZero() {
 			continue

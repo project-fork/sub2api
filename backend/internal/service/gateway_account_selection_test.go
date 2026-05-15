@@ -137,6 +137,21 @@ func TestSelectByLRU_UsesCodex7dResetBeforeLastUsed(t *testing.T) {
 	require.Equal(t, int64(2), result.account.ID, "codex 7d 更快重置应优先于 LastUsedAt")
 }
 
+func TestSelectByLRU_PrefersCodex5hResetBeforeCodex7dReset(t *testing.T) {
+	now := time.Now().UTC()
+	accounts := []accountWithLoad{
+		makeAccWithLoad(1, 1, 10, nil, AccountTypeOAuth),
+		makeAccWithLoad(2, 1, 10, nil, AccountTypeOAuth),
+	}
+	accounts[0].account.Extra = map[string]any{"codex_7d_reset_at": now.Add(40 * time.Minute).Format(time.RFC3339)}
+	accounts[1].account.Extra = map[string]any{"codex_5h_reset_at": now.Add(15 * time.Minute).Format(time.RFC3339)}
+
+	result := selectByLRU(accounts, false)
+
+	require.NotNil(t, result)
+	require.Equal(t, int64(2), result.account.ID, "codex 5h 更快重置时应优先于 codex 7d")
+}
+
 func TestSortAccountsByPriorityAndLastUsed_SamePriorityByLastUsed(t *testing.T) {
 	now := time.Now()
 	accounts := []*Account{

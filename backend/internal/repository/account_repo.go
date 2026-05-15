@@ -604,6 +604,23 @@ func accountListOrder(params pagination.PaginationParams) []func(*entsql.Selecto
 	case "last_used_at":
 		field = dbaccount.FieldLastUsedAt
 		defaultOrder = false
+	case "reset_at":
+		defaultOrder = false
+		return []func(*entsql.Selector){
+			func(s *entsql.Selector) {
+				orderExpr := `
+CASE
+  WHEN extra->>'codex_7d_reset_at' IS NULL OR extra->>'codex_7d_reset_at' = '' THEN 1
+  ELSE 0
+END`
+				resetExpr := "NULLIF(extra->>'codex_7d_reset_at', '')::timestamptz"
+				if sortOrder == pagination.SortOrderDesc {
+					s.OrderExpr(entsql.Expr(orderExpr), entsql.Expr(resetExpr+" DESC"), entsql.Expr(dbaccount.FieldID+" DESC"))
+					return
+				}
+				s.OrderExpr(entsql.Expr(orderExpr), entsql.Expr(resetExpr+" ASC"), entsql.Expr(dbaccount.FieldID+" ASC"))
+			},
+		}
 	case "expires_at":
 		field = dbaccount.FieldExpiresAt
 		defaultOrder = false
